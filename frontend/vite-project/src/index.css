@@ -1,0 +1,11 @@
+:root {
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #687066;
+  background: #f4f1ea;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font-family: inherit; }
