@@ -5,6 +5,19 @@ import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000'
 
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+const timeFormatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
+
+function formatEventDate(event) {
+  if (event.start?.date) return dateFormatter.format(new Date(`${event.start.date}T00:00:00`))
+  return event.start?.dateTime ? dateFormatter.format(new Date(event.start.dateTime)) : 'No date'
+}
+
+function formatEventTime(event) {
+  if (event.start?.date) return 'All day'
+  return event.start?.dateTime ? timeFormatter.format(new Date(event.start.dateTime)) : 'No time'
+}
+
 function ProtectedRoute({ user, loading, children }) {
   if (loading) return <p className="status">Checking session...</p>
   return user ? children : <Navigate to="/login" replace />
@@ -25,11 +38,20 @@ function LoginPage({ onLogin, error, loading }) {
   )
 }
 
+function ProfileAvatar({ user }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const initials = user.name?.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'G'
+
+  if (!user.picture || imageFailed) return <span className="avatar avatar-fallback" aria-label={`${user.name} profile`}>{initials}</span>
+  return <img className="avatar" src={user.picture} alt={`${user.name} profile`} onError={() => setImageFailed(true)} />
+}
+
 function Dashboard({ user, onLogout }) {
   const [events, setEvents] = useState([])
   const [calendarToken, setCalendarToken] = useState('')
   const [calendarError, setCalendarError] = useState('')
   const [loadingEvents, setLoadingEvents] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState('this month')
 
   const requestCalendarAccess = useGoogleLogin({
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
@@ -45,6 +67,7 @@ function Dashboard({ user, onLogout }) {
         const data = await response.json()
         if (!response.ok) throw new Error(data.details ? `${data.error}: ${data.details}` : data.error ?? 'Calendar request failed')
         setEvents(data.events ?? [])
+        setCalendarMonth(data.month ?? 'this month')
       } catch (error) {
         setCalendarError(error.message)
       } finally {
@@ -59,16 +82,16 @@ function Dashboard({ user, onLogout }) {
       <section className="auth-panel">
         <p className="eyebrow">OAuth lab / dashboard</p>
         <div className="profile-card">
-          <img className="avatar" src={user.picture} alt="Profile" />
+          <ProfileAvatar user={user} />
           <div className="profile-copy"><span className="signed-in">Signed in</span><h2>{user.name}</h2><p>{user.email}</p></div>
           <button className="logout-button" type="button" onClick={onLogout}>Log out</button>
         </div>
         <section className="calendar-panel">
-          <div><p className="eyebrow">Calendar</p><h2>Next five events</h2></div>
+          <div className="calendar-heading"><div><p className="eyebrow">Google Calendar</p><h2>{calendarMonth}</h2></div><span className="event-count">{events.length} events</span></div>
           <button className="calendar-button" type="button" onClick={() => requestCalendarAccess()}>{loadingEvents ? 'Loading...' : 'Connect Calendar'}</button>
           {!calendarToken && !calendarError ? <p className="security-note">Grant read-only access to view your upcoming events.</p> : null}
           {calendarError ? <p className="error">{calendarError}</p> : null}
-          <ol className="event-list">{events.map((event) => <li key={event.id}><strong>{event.summary ?? 'Untitled event'}</strong><span>{event.start?.dateTime ?? event.start?.date ?? 'No start time'}</span></li>)}</ol>
+          {events.length ? <div className="table-wrap"><table className="event-table"><thead><tr><th>Event</th><th>Date</th><th>Time</th><th>Calendar</th><th>Location</th><th>Status</th></tr></thead><tbody>{events.map((event) => <tr key={`${event.calendarId}-${event.id}`}><td>{event.htmlLink ? <a href={event.htmlLink} target="_blank" rel="noreferrer">{event.summary ?? 'Untitled event'}</a> : event.summary ?? 'Untitled event'}</td><td>{formatEventDate(event)}</td><td>{formatEventTime(event)}</td><td>{event.isHoliday ? <span className="holiday-label">Holiday</span> : event.calendarName ?? 'Primary calendar'}</td><td>{event.location ?? '—'}</td><td><span className={`event-status ${event.status ?? 'confirmed'}`}>{event.status ?? 'confirmed'}</span></td></tr>)}</tbody></table></div> : <p className="empty-state">No events found for {calendarMonth}.</p>}
         </section>
       </section>
       <aside className="info-panel"><span className="mark">G</span><p>Private dashboard</p><small>Calendar access is read-only.</small></aside>
